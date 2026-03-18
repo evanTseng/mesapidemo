@@ -57,9 +57,16 @@ class JobAction(BaseModel):
 
 # --- 3. 模擬資料庫 ---
 FAKE_STAFF_RECORDS = [
-    {"staff_id": "S001", "station_id": "A1", "action": "check-in", "timestamp": "2024-03-18 08:00:00"}
+    {"staff_id": "S001", "station_id": "A1", "action": "check-in", "timestamp": "2024-03-18 08:00:00"},
+    {"staff_id": "S001", "station_id": "A1", "action": "check-out", "timestamp": "2024-03-18 17:00:00"},
+    {"staff_id": "S002", "station_id": "B2", "action": "check-in", "timestamp": "2024-03-18 09:15:20"}
 ]
-FAKE_JOB_RECORDS = []
+
+FAKE_JOB_RECORDS = [
+    {"job_id": "JOB-101", "station_id": "A1", "action": "entry", "timestamp": "2024-03-18 10:00:00"},
+    {"job_id": "JOB-101", "station_id": "A1", "action": "exit", "timestamp": "2024-03-18 10:45:00"},
+    {"job_id": "JOB-102", "station_id": "C3", "action": "entry", "timestamp": "2024-03-18 11:00:00"}
+]
 
 # --- 4. API 端點 ---
 
