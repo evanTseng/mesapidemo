@@ -7,18 +7,13 @@ from typing import Optional
 
 app = FastAPI(title="工廠管理系統 API - 最終穩定版")
 
-# --- 1. 全域異常處理器：捕捉所有格式錯誤並轉換為中文 ---
+# --- 1. 全域異常處理器 ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """
-    當參數缺失、型別錯誤或不符合長度時，統一回傳中文錯誤。
-    例如回傳：{"status": "error", "message": "staff_id 參數不得為空"}
-    """
     errors = exc.errors()
     field_name = "參數"
     
     if errors:
-        # 取得最後一個路徑名稱，即為出錯的欄位名
         loc = errors[0].get("loc")
         field_name = str(loc[-1]) if loc else "參數"
 
@@ -32,14 +27,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 # --- 2. 資料模型定義 ---
 class StaffAction(BaseModel):
-    # min_length=1 確保欄位必須存在且長度不為 0
     staff_id: str = Field(..., min_length=1)
     station_id: str = Field(..., min_length=1)
 
     @field_validator('staff_id', 'station_id')
     @classmethod
     def check_not_blank(cls, v: str) -> str:
-        # 手動檢查是否只有空白字元 "  "
         if not v or not v.strip():
             raise ValueError("不得為空")
         return v.strip()
@@ -74,7 +67,6 @@ FAKE_JOB_RECORDS = [
 def read_root():
     return {"message": "API 運行中", "docs": "/docs"}
 
-# (1) 人員上工
 @app.post("/staff/check-in")
 async def staff_check_in(data: StaffAction):
     return {
@@ -83,7 +75,6 @@ async def staff_check_in(data: StaffAction):
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
-# (2) 人員下工
 @app.post("/staff/check-out")
 async def staff_check_out(data: StaffAction):
     return {
@@ -92,7 +83,6 @@ async def staff_check_out(data: StaffAction):
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
-# (3) 工單進站
 @app.post("/job/entry")
 async def job_entry(data: JobAction):
     return {
@@ -102,7 +92,6 @@ async def job_entry(data: JobAction):
         "entry_time": datetime.now().isoformat()
     }
 
-# (4) 工單出站
 @app.post("/job/exit")
 async def job_exit(data: JobAction):
     return {
@@ -112,22 +101,54 @@ async def job_exit(data: JobAction):
         "exit_time": datetime.now().isoformat()
     }
 
-# --- 5. 查詢紀錄 API (Query Parameter 防呆) ---
+# --- 5. 查詢紀錄 API (含 Filter 功能) ---
 
 @app.get("/staff/records", tags=["查詢"])
 async def get_staff_records(staff_id: Optional[str] = None):
-    if staff_id is not None and not staff_id.strip():
-        return JSONResponse(
-            status_code=400, 
-            content={"status": "error", "message": "staff_id 參數不得為空"}
-        )
-    return {"count": len(FAKE_STAFF_RECORDS), "data": FAKE_STAFF_RECORDS}
+    """
+    查詢人員紀錄：
+    - 若無帶參數，回傳所有紀錄。
+    - 若帶 staff_id，則篩選對應人員。
+    """
+    results = FAKE_STAFF_RECORDS
+    
+    if staff_id is not None:
+        clean_id = staff_id.strip()
+        if not clean_id:
+            return JSONResponse(
+                status_code=400, 
+                content={"status": "error", "message": "staff_id 參數不得為空"}
+            )
+        # 進行篩選
+        results = [r for r in FAKE_STAFF_RECORDS if r["staff_id"] == clean_id]
+
+    return {
+        "status": "success",
+        "count": len(results), 
+        "data": results
+    }
 
 @app.get("/job/records", tags=["查詢"])
 async def get_job_records(job_id: Optional[str] = None):
-    if job_id is not None and not job_id.strip():
-        return JSONResponse(
-            status_code=400, 
-            content={"status": "error", "message": "job_id 參數不得為空"}
-        )
-    return {"count": len(FAKE_JOB_RECORDS), "data": FAKE_JOB_RECORDS}
+    """
+    查詢工單紀錄：
+    - 若無帶參數，回傳所有紀錄。
+    - 若帶 job_id，則篩選對應工單。
+    """
+    results = FAKE_JOB_RECORDS
+
+    if job_id is not None:
+        clean_id = job_id.strip()
+        if not clean_id:
+            return JSONResponse(
+                status_code=400, 
+                content={"status": "error", "message": "job_id 參數不得為空"}
+            )
+        # 進行篩選
+        results = [r for r in FAKE_JOB_RECORDS if r["job_id"] == clean_id]
+
+    return {
+        "status": "success",
+        "count": len(results), 
+        "data": results
+    }
