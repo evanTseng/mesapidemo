@@ -1,54 +1,47 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator, ValidationInfo
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
-app = FastAPI(title="工廠管理系統 API - Pydantic V2 修正版")
+app = FastAPI(title="工廠管理系統 API - 最終穩定版")
 
-# --- 1. 全域異常處理器：自定義中文錯誤訊息 ---
+# --- 1. 全域異常處理器：捕捉所有格式錯誤並轉換為中文 ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
-    攔截所有參數驗證錯誤。
-    若是欄位缺失或為空，回傳：{"status": "error", "message": "XXX 參數不得為空"}
+    當參數缺失、型別錯誤或不符合長度時，統一回傳中文錯誤。
+    例如回傳：{"status": "error", "message": "staff_id 參數不得為空"}
     """
     errors = exc.errors()
+    field_name = "參數"
+    
     if errors:
-        # 取得出錯的最後一個欄位路徑
-        field_name = str(errors[0].get("loc")[-1])
-        
-        # 檢查原始錯誤訊息，如果已經是我們在 Validator 寫好的中文，就直接用
-        raw_msg = errors[0].get("msg", "")
-        if "不得為空" in raw_msg:
-            # 去除 Pydantic 自動加上的 "Value error, " 前綴
-            error_msg = raw_msg.split(", ")[-1] if ", " in raw_msg else raw_msg
-        else:
-            error_msg = f"{field_name} 參數不得為空"
-    else:
-        error_msg = "參數請求錯誤"
+        # 取得最後一個路徑名稱，即為出錯的欄位名
+        loc = errors[0].get("loc")
+        field_name = str(loc[-1]) if loc else "參數"
 
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={
             "status": "error", 
-            "message": error_msg
+            "message": f"{field_name} 參數不得為空"
         }
     )
 
 # --- 2. 資料模型定義 ---
 class StaffAction(BaseModel):
-    # Field(..., min_length=1) 確保 JSON 裡必須有這個 Key 且不是 ""
+    # min_length=1 確保欄位必須存在且長度不為 0
     staff_id: str = Field(..., min_length=1)
     station_id: str = Field(..., min_length=1)
 
     @field_validator('staff_id', 'station_id')
     @classmethod
-    def check_not_blank(cls, v: str, info: ValidationInfo) -> str:
-        # 防止只輸入空格 "  "
+    def check_not_blank(cls, v: str) -> str:
+        # 手動檢查是否只有空白字元 "  "
         if not v or not v.strip():
-            raise ValueError(f"{info.field_name} 參數不得為空")
+            raise ValueError("不得為空")
         return v.strip()
 
 class JobAction(BaseModel):
@@ -57,9 +50,9 @@ class JobAction(BaseModel):
 
     @field_validator('job_id', 'station_id')
     @classmethod
-    def check_not_blank(cls, v: str, info: ValidationInfo) -> str:
+    def check_not_blank(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError(f"{info.field_name} 參數不得為空")
+            raise ValueError("不得為空")
         return v.strip()
 
 # --- 3. 模擬資料庫 ---
@@ -98,7 +91,6 @@ async def job_entry(data: JobAction):
     return {
         "status": "success",
         "job_id": data.job_id,
-        "action": "進站",
         "station": data.station_id,
         "entry_time": datetime.now().isoformat()
     }
@@ -109,7 +101,6 @@ async def job_exit(data: JobAction):
     return {
         "status": "success",
         "job_id": data.job_id,
-        "action": "出站",
         "station": data.station_id,
         "exit_time": datetime.now().isoformat()
     }
@@ -118,17 +109,11 @@ async def job_exit(data: JobAction):
 
 @app.get("/staff/records", tags=["查詢"])
 async def get_staff_records(staff_id: Optional[str] = None):
-    # 檢查 URL 參數是否為空字串或空格
     if staff_id is not None and not staff_id.strip():
         return JSONResponse(
             status_code=400, 
             content={"status": "error", "message": "staff_id 參數不得為空"}
         )
-    
-    if staff_id:
-        filtered = [r for r in FAKE_STAFF_RECORDS if r["staff_id"] == staff_id.strip()]
-        return {"count": len(filtered), "data": filtered}
-    
     return {"count": len(FAKE_STAFF_RECORDS), "data": FAKE_STAFF_RECORDS}
 
 @app.get("/job/records", tags=["查詢"])
@@ -138,9 +123,4 @@ async def get_job_records(job_id: Optional[str] = None):
             status_code=400, 
             content={"status": "error", "message": "job_id 參數不得為空"}
         )
-    
-    if job_id:
-        filtered = [r for r in FAKE_JOB_RECORDS if r["job_id"] == job_id.strip()]
-        return {"count": len(filtered), "data": filtered}
-        
     return {"count": len(FAKE_JOB_RECORDS), "data": FAKE_JOB_RECORDS}
